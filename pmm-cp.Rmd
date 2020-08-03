@@ -1,0 +1,88 @@
+---
+title: "Practical Machine Learning - Course Project"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(AppliedPredictiveModeling)
+library(elasticnet)
+library(caret)
+library(gbm)
+library(dplyr)
+
+
+```
+
+## Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. We want to predict the manner in which each participant did the excercise.
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har. 
+
+
+## Load & Clean Data
+
+First we will import the training data, which we will use to build our predictive model, as well as the test data set of 20 cases. Using the str() function, we can get familiar with the data sets.
+
+```{r data load}
+
+train_full <- read.csv("pml-training.csv")
+test <- read.csv("pml-testing.csv")
+
+str(train_full)
+```
+
+Next we will clean the training data set. There are several columns full of mostly NAs or white space. As these will not be helpful in a model build, we will remove them from out feature set. The first several columns are identifying information; we will remove these as well.
+
+```{r clean}
+#remove columns with blank and NA values
+train_full <- train_full %>% mutate_all(na_if,"")
+not_na_cols <- train_full %>% select_if(~ !any(is.na(.))) %>% names()
+train_full <- train_full[not_na_cols]
+
+#remove first 5 columns - not features we want to include in the model
+train_full <- train_full[-(1:5)]
+```
+
+## Modeling
+
+We will split our modeling data set into training and validation so that we can see how well our model performs on a separate data set before applying it to our test cases.
+
+```{r split}
+inTrain = createDataPartition(train_full$classe, p = 7/10)[[1]]
+train = train_full[ inTrain,]
+valid = train_full[-inTrain,]
+
+```
+
+As this is a classification problem, one of the most accurate type of models to use is a random forest model. However, since random forest models are prone to overfitting, we will also incorporate cross validation into the model fit (n=5 folds) and set a seed for reproducibility.
+
+```{r model_fit}
+set.seed(8259)
+fitControl <- trainControl(
+  method = "repeatedcv",
+  number = 5)
+
+rfFit <- train(classe ~ ., data = train, 
+                 method = "rf", 
+                 trControl = fitControl)
+
+plot(rfFit)
+```
+
+## Validation
+
+We will then apply the model to the validation data set. A confusion matrix will give us an estimate of the accuracy of our model - over 99%.
+
+```{r valid}
+pred <- predict(rfFit, valid)
+confusionMatrix(pred, as.factor(valid$classe))$overall[1]
+
+table(pred, valid$classe)
+```
+
+
